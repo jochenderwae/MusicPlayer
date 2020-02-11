@@ -74,3 +74,5 @@ Returns the numeric value (frequency) of the last played note. Use this to e.g. 
 You can use the supplied HTML page to convert musical scores in ABC fromat (see: http://abcnotation.com/) to integer arrays containing all note information.
 Paste the ABC notation score in the top input box, click convert and copy the contents of the bottom two text boxes to a .cpp file and an .ino file.
 Or mix them together into one file.
+
+You can also use the online version of the [converter](https://jochenderwae.github.io/MusicPlayer/).
