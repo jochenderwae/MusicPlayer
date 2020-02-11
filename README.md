@@ -3,8 +3,9 @@
 MusicPlayer is an Arduino library to play music scores on any number of Arduino compatible devices using only a piezo buzzer.
 This repository also includes a web page that can turn music scores in ABC notation into a data array that the MusicPlayer can play.
 The convertor is very basic and will skip over characters or constructions that it doesn't recognize.
+
+A big thanks to @robsoncouto and his [arduino-songs project](https://github.com/robsoncouto/arduino-songs/) from which I stole quite some code to make this MusicPlayer.
 ## Arduino code
-Robson Couto https://github.com/robsoncouto/arduino-songs/
 Start with including the MusicPlayer header:
 ```C++
 #include "MusicPlayer.h"
