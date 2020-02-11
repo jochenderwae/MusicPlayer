@@ -1,0 +1,404 @@
+<html>
+	<head>
+		<title>Music ABC Notation to Arduino Music Player</title>
+		<meta charset="UTF-8">
+
+		<style type="text/css">
+			* {
+				margin: 0;
+				padding: 0;
+			}
+			
+			body {
+				font-family: arial;
+			}
+			
+			p {
+				padding-top: 5px;
+				padding-bottom: 5px;
+			}
+			
+			label {
+			}
+			
+			#page {
+				padding-top: 20px;
+				display: flex;
+				flex-direction: column;
+				margin: auto;
+				width: 900px;
+			}
+			
+			textarea {
+				width: 100%;
+				margin: 0;
+				padding: 0;
+			}
+			
+			#musicOutput textarea {
+				border: none;
+			}
+			
+			.panel {
+				width: 100%;
+				margin-bottom: 10px;
+				padding-top: 10px;
+				padding-bottom: 10px;
+			}
+			
+			#outputPanel {
+				border: solid 1px darkblue;
+			}
+			
+			.outputTopBar {
+				display: block;
+				width: 100%;
+				bottom-border: solid 1px darkblue;
+				background-color: lightblue;
+				text-align: right;
+			}
+			
+			#musicOutput,  #inoOutput{
+				min-height: 50px;
+				background-color: white;
+			}
+			
+			.outputTopBar button {
+				margin: 3px;
+			}
+			
+		</style>
+	</head>
+	
+	<body>
+		<div id="page">
+			<div id="title" class="panel">
+				<h1>ABC Music notation to Arduino</h1>
+			</div>
+			<div id="description" class="panel">
+				<p>
+					This small application converts ABC music notation (ASCII notation of musical score) to an array of frequencies and note durations usable by the MusicPlayer Arduino library.
+					<br>
+					See: <a href="https://github.com/jochenderwae/MusicPlayer">https://github.com/jochenderwae/MusicPlayer</a> for more information.
+				</p>
+				<p>
+					Copy the contents of "Arduino cpp file with music" to a new cpp file. There's also an example ino file. Connect a piezo buzzer to pin 9 of the Arduino and upload the application.
+				</p>
+			</div>
+			<div id="input" class="panel">
+				<label for="musicInput">Music in ABC notation</label>
+				<textarea id="musicInput" cols="80" rows="10"></textarea>
+			</div>
+			<div id="controls" class="panel">
+				<button onclick="convert();">Convert</button>
+			</div>
+			<div id="output" class="panel">
+				<label for="musicOutput">Arduino cpp file with music</label>
+				<div id="musicOutputPanel" class="outputPanel">
+					<div id="musicOutputTopBar" class="outputTopBar">
+						<button onclick="copyToClipboard()">Copy to clipboard</button>
+					</div>
+					<textarea id="musicOutput" cols="80" rows="10"></textarea>
+				</div>
+				
+				<label for="inoOutput">Main Arduino file (example)</label>
+				<div id="inoOutputPanel" class="outputPanel">
+					<div id="inoOutputTopBar" class="outputTopBar">
+						<button onclick="copyToClipboard()">Copy to clipboard</button>
+					</div>
+					<textarea id="inoOutput" cols="80" rows="10"></textarea>
+				</div>
+			</div>
+		</div>
+		
+		<script language="javascript">
+			var commentRegEx = /%(.*)?/g;
+			var headerRegEx = /([CKLMNQTX])\:([^$]*)/;
+			var noteRegEx = /^([CDEFGABcdefgabZz])([,'])*(\d*)?([\/<>]+\d*)?/;
+			var repeatRegEx = /^(\|\:|\:\||\|?\[|\|\])([12]?)/;
+			var tempoRegEx = /("\w+")?\s?(?:(\d+\/\d+)=?)?(\d+)?/;
+			var lengths = {
+				1: "FULL",
+				1.5: "FULL_DOT",
+				0.5: "HALF",
+				0.75: "HALF_DOT",
+				0.25: "QART",
+				0.375: "QART_DOT",
+				0.125: "EIGT",
+				0.1875: "EIGT_DOT",
+				0.0625: "SIXT",
+				0.09375: "SIXT_DOT",
+				0.03125: "THRT",
+				0.046875: "THRT_DOT"
+			};
+			var fileTemplate = ""
+							 + "#include <avr/pgmspace.h>\n"
+							 + "#include \"MusicPlayer.h\"\n"
+							 + "\n"
+							 + "/*\n"
+							 + " * Tune converted from ABC notation to Arduino code.\n"
+							 + " * see: https://github.com/jochenderwae/MusicPlayer\n"
+							 + " * Tune name: {title}\n"
+							 + " * Composer:  {composer}\n"
+							 + " * {info}\n"
+							 + " */\n"
+							 + "\n"
+							 + "extern const PROGMEM int {varName}[] = {\n"
+							 + "{tempo}, // tempo\n"
+							 + "{fileContent}\n"
+							 + "NOTE_END\n"
+							 + "};";
+			var inoTemplate  = ""
+							 + "#include <avr/pgmspace.h>\n"
+							 + "#include \"MusicPlayer.h\"\n"
+							 + "\n"
+							 + "extern const PROGMEM int {varName}[];\n"
+							 + "MusicPlayer musicPlayer = MusicPlayer(9);"
+							 + "\n"
+							 + "void setup()\n"
+							 + "{\n"
+							 + "\tmusicPlayer.play({varName});\n"
+							 + "}\n"
+							 + "\n"
+							 + "void loop()\n"
+							 + "{\n"
+							 + "\tmusicPlayer.tick();\n"
+							 + "}\n";
+			
+			String.prototype.substitute = function(object) {
+				return this.replace(/\{(\w+(?:\.\w+)*)\}/g, function(_unused, param){
+					var names = param.split(".");
+					var value = object;
+					
+					for(var name in names) {
+						if(value != undefined) {
+							value = value[names[name]];
+						}
+					}
+					return value != undefined ? value : "{" + param + "}";
+				});
+			}
+			
+			var tune = null;
+			var bottomOctave = "CDEFGAB";
+			var topOctave = "cdefgab";
+			function convert() {
+				tune = {
+					title:"",
+					composer:"",
+					info:"",
+					tempo:140,
+					meter:"C",
+					noteLength:"1/8",
+					key:"",
+					noteShift:0,
+					score:[],
+					varName: "",
+					fileName: ""
+				};
+				var tuneABC = document.getElementById("musicInput").value;
+				tuneABC = tuneABC.replace(commentRegEx, "");
+				
+				var lines = tuneABC.split('\n');
+				var lineNumber = 0;
+				for(; lineNumber < lines.length; lineNumber++) {
+					var line = lines[lineNumber].trim();
+					var header = headerRegEx.exec(line);
+					if(header) {
+						switch(header[1]) {
+						case "X":
+							// store tune number
+							break;
+						case "T":
+							tune.title = header[2].trim();
+							break;
+						case "C":
+							tune.composer = header[2].trim();
+							break;
+						case "N":
+							tune.info = header[2].trim();
+							break;
+						case "Q":
+							var tempoText = header[2].trim();
+							var tempoMatch = tempoText.match(tempoRegEx);
+							if(tempoMatch && tempoMatch[3]) {
+								tune.tempo = tempoMatch[3];
+							}
+							break;
+						case "M":
+							tune.meter = header[2].trim();
+							break;
+						case "L":
+							tune.noteLength = header[2].trim();
+							break;
+						case "K":
+							tune.key = header[2].trim();
+							// Is this right?
+							tune.noteShift = (bottomOctave.search("C") + 7) - bottomOctave.search(tune.key.toUpperCase());
+							break;
+						}
+					} else {
+						if(line.length > 0) {
+							tune.score.push(line);
+							// todo: interpret the line immediately since further headers may change the settings
+						}
+					}
+					//console.log(lineNumber, line, header);
+				}
+				
+				tune.score = tune.score.join('\n');
+				tune.noteLength = eval(tune.noteLength);
+				tune.noteList = [];
+				var baseOctave = 4;
+				
+				var scoreLength = tune.score.length;
+				var noteIndex = 0;
+				var nextMultiplier = null;
+				var repeatNoteList = [];
+				var recordRepeat = false;
+				while(noteIndex < scoreLength) {
+					var scoreChar = tune.score[noteIndex];
+					var octave = baseOctave;
+					
+					var scoreSubString = tune.score.substring(noteIndex);
+					var noteMatch = noteRegEx.exec(scoreSubString);
+					var repeatMatch = repeatRegEx.exec(scoreSubString);
+					
+					if(noteMatch) {
+						var note = null;
+						var length = tune.noteLength;
+						
+						var fullNoteM = noteMatch[0];
+						var letterM = noteMatch[1];
+						var accentM = noteMatch[2];
+						var multiplierM = noteMatch[3];
+						var fractionM = noteMatch[4];
+						
+						if(letterM.toUpperCase() == "Z") {
+							note = "NOTE_REST";
+						} else {
+							var topFound = topOctave.search(scoreChar) > 0;
+							if(topFound) {
+								octave++;
+							}
+							if(accentM && accentM[0] == ",") {
+								octave -= accentM.length;
+							}
+							if(accentM && accentM[0] == "'") {
+								octave += accentM.length;
+							}
+							
+							notePos = bottomOctave.search(scoreChar.toUpperCase())/* + tune.noteShift*/;
+							while(notePos < 0) {
+								notePos += bottomOctave.length;
+								octave--;
+							}
+							while(notePos >= bottomOctave.length) {
+								notePos -= bottomOctave.length;
+								octave++;
+							}
+							note = "NOTE_" + bottomOctave[notePos] + "" + octave;
+						}
+						
+						if(nextMultiplier) {
+							multiplierM = nextMultiplier;
+							nextMultiplier = null;
+						}
+						if(fractionM == ">") {
+							multiplierM = 1.5;
+							nextMultiplier = 0.5;
+						} else if(fractionM == "<") {
+							multiplierM = 0.5;
+							nextMultiplier = 1.5;
+						} else if(fractionM == "/") {
+							multiplierM = 0.5;
+						} else if(fractionM == "//") {
+							multiplierM = 0.25;
+						} else if(fractionM == "///") {
+							multiplierM = 0.125;
+						} else if(fractionM) {
+							if(multiplierM) {
+								multiplierM = eval(multiplierM+""+fractionM);
+							} else {
+								multiplierM = eval("1"+fractionM);
+							}
+						}
+						//console.log(note, length, multiplierM, length * multiplierM, lengths[length * multiplierM]);
+						if(multiplierM) {
+							length = length * multiplierM;
+						}
+						
+						var noteString = "";
+						if(lengths[length]) {
+							noteString = note + ", " + lengths[length] + ", ";
+						} else {
+							noteString = note + ", " + lengths[tune.noteLength] + ", ";
+						}
+						
+						tune.noteList.push(noteString);
+						if(recordRepeat) {
+							repeatNoteList.push(noteString);
+						}
+						
+						noteIndex += fullNoteM.length;
+					} else if(repeatMatch) {
+						var fullRepeatM = repeatMatch[0];
+						var symbolM = repeatMatch[1];
+						var countM = repeatMatch[2];
+						//console.log(repeatMatch);
+						
+						switch(symbolM) {
+						case "|:":
+							recordRepeat = true;
+							break;
+						case "|[":
+						case ":|":
+							recordRepeat = false;
+							if(countM == 2) {
+								tune.noteList = tune.noteList.concat(["\n"], repeatNoteList);
+							}
+							break;
+						case "||":
+							recordRepeat = false;
+							repeatNoteList = [];
+							break;
+						}
+						
+						tune.noteList.push("\n");
+						noteIndex += fullRepeatM.length;
+					} else {
+						if(scoreChar == "|") {
+							tune.noteList.push("\n");
+							if(recordRepeat) {
+								repeatNoteList.push("\n");
+							}
+						}
+						noteIndex++;
+					}
+				}
+				tune.fileContent = tune.noteList.join("");
+				var varName = tune.title.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").split(" ").map(function(s){return s[0].toUpperCase().concat(s.substring(1));}).join("");
+				tune.varName = varName[0].toLowerCase().concat(varName.substring(1));
+				tune.fileName = varName.concat(".cpp");
+				
+				var output = document.getElementById("musicOutput");
+				var outputText = fileTemplate.substitute(tune);
+				output.value = outputText;
+				
+				var inoOutput = document.getElementById("inoOutput");
+				var inoText = inoTemplate.substitute(tune);
+				inoOutput.value = inoText;
+			}
+			
+			function copyToClipboard() {
+			  var copyText = document.getElementById("musicOutput");
+			  copyText.select();
+			  copyText.setSelectionRange(0, 99999); /*For mobile devices*/
+			  document.execCommand("copy");
+
+			  /* Alert the copied text */
+			  /*alert("Copied the text: " + copyText.value);*/
+			}
+		</script>
+	</body>
+</html>
