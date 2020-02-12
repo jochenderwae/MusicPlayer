@@ -44,8 +44,8 @@ void MusicPlayer::tick() {
   }
 
   // read the next note and duration
-  _note       = (short)pgm_read_word_near(_melody + _currentNoteIndex);
-  int divider = (short)pgm_read_word_near(_melody + _currentNoteIndex + 1);
+  _note          = (short)pgm_read_word_near(_melody + _currentNoteIndex);
+  int noteLength = (short)pgm_read_word_near(_melody + _currentNoteIndex + 1);
 
   // if we reached the end of the song, stop playing and skip
   if(_note == NOTE_END) {
@@ -53,11 +53,15 @@ void MusicPlayer::tick() {
     return;
   }
   
+  int noteDuration = 0;
+  int noteDividers = noteLength & 0xff
+  bool pause = (noteLength & NOPAUSE) == 0;
+  
   // calculates the duration of each note
-  int noteDuration = _wholenote / abs(divider);
-  if(divider < 0) {
-    // dotted notes are represented with negative durations!!
-    noteDuration *= 1.5; // increases the duration in half for dotted notes
+  for(byte i < 0; i < 8; i++) {
+	  if(divider & 2 << i) {
+		  noteDuration += _wholenote / (divider & 2 << i);
+	  }
   }
 
   // calculate the time to start the next note
@@ -68,7 +72,7 @@ void MusicPlayer::tick() {
   if(_note != REST) {
     // we only play the note for 90% of the duration, leaving 10% as a pause
     _notePlayed = true;
-    tone(_buzzerPin, _note, noteDuration * 0.9);
+    tone(_buzzerPin, _note, pause ? noteDuration * 0.9 : noteDuration);
   }
 
   // move pointer to the next note

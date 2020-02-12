@@ -87,7 +87,8 @@
 			</div>
 			<div id="input" class="panel">
 				<label for="musicInput">Music in ABC notation</label>
-				<textarea id="musicInput" cols="80" rows="10"></textarea>
+				<textarea id="musicInput" cols="80" rows="10">
+				</textarea>
 			</div>
 			<div id="controls" class="panel">
 				<button onclick="convert();">Convert</button>
@@ -113,8 +114,8 @@
 		
 		<script language="javascript">
 			var commentRegEx = /%(.*)?/g;
-			var headerRegEx = /([CKLMNQTX])\:([^$]*)/;
-			var noteRegEx = /^([CDEFGABcdefgabZz])([,'])*(\d*)?([\/<>]+\d*)?/;
+			var headerRegEx = /^([A-Z])\:([^$]*)/;
+			var noteRegEx = /^([CDEFGABcdefgabz])([,'])*(\d*)?([\/<>]+\d*)?(\-)?/;
 			var repeatRegEx = /^(\|\:|\:\||\|?\[|\|\])([12]?)/;
 			var tempoRegEx = /("\w+")?\s?(?:(\d+\/\d+)=?)?(\d+)?/;
 			var lengths = {
@@ -236,6 +237,10 @@
 							// Is this right?
 							tune.noteShift = (bottomOctave.search("C") + 7) - bottomOctave.search(tune.key.toUpperCase());
 							break;
+						case "Z":
+						default:
+							console.log("Skipped header: ", header[0]);
+							break;
 						}
 					} else {
 						if(line.length > 0) {
@@ -273,6 +278,7 @@
 						var accentM = noteMatch[2];
 						var multiplierM = noteMatch[3];
 						var fractionM = noteMatch[4];
+						var noPauseM = noteMatch[5];
 						
 						if(letterM.toUpperCase() == "Z") {
 							note = "NOTE_REST";
@@ -323,17 +329,21 @@
 								multiplierM = eval("1"+fractionM);
 							}
 						}
-						//console.log(note, length, multiplierM, length * multiplierM, lengths[length * multiplierM]);
+						//console.log(noteMatch, note, length, multiplierM, length * multiplierM, lengths[length * multiplierM]);
 						if(multiplierM) {
 							length = length * multiplierM;
 						}
 						
-						var noteString = "";
+						var lengthString = "";
 						if(lengths[length]) {
-							noteString = note + ", " + lengths[length] + ", ";
+							lengthString = lengths[length];
 						} else {
-							noteString = note + ", " + lengths[tune.noteLength] + ", ";
+							lengthString = lengths[tune.noteLength];
 						}
+						if(noPauseM == "-") {
+							lengthString += " | NOPAUSE";
+						}
+						var noteString = note + ", " + lengthString + ", ";
 						
 						tune.noteList.push(noteString);
 						if(recordRepeat) {

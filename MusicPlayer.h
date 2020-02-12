@@ -96,20 +96,40 @@
 #define NOTE_DS8 4978
 #define REST 0
 
-#define FULL 1
-#define FULL_DOT -1
-#define HALF 2
-#define HALF_DOT -2
-#define QART 4
-#define QART_DOT -4
-#define EIGT 8
-#define EIGT_DOT -8
-#define SIXT 16
-#define SIXT_DOT -16
-#define THRT 32
-#define THRT_DOT -32
+/*
+timing bit pattern
+Flags    Duration
+00000000 00000000
+0000000P 00ITSQHF
+F = full note
+H = half note
+Q = quarter note
+S = sixteenth note
+T = thirtysecond note
+I = sixtyfourth note
 
-#define NOTE_END 9999
+P = no pause (between this and next note)
+
+*/
+
+#define FULL 1
+#define FULL_DOT 3
+#define HALF 2
+#define HALF_DOT 6
+#define QART 4
+#define QART_DOT 12
+#define EIGT 8
+#define EIGT_DOT 24
+#define SIXT 16
+#define SIXT_DOT 48
+#define THRT 32
+#define THRT_DOT 96
+#define SFOR 64
+
+#define NOPAUSE 0x0100
+
+
+#define NOTE_END 0xFFFF
 
 class MusicPlayer {
 private:
