@@ -54,9 +54,10 @@ NOTE_C4, QART, NOTE_A4, QART, NOTE_A4, QART,
 NOTE_END
 };
 
-MusicPlayer<ArduinoToneNotePolicy<9>> musicPlayer = MusicPlayer<ArduinoToneNotePolicy<9>>();
+MusicPlayer<ArduinoToneNotePolicy<D4>> musicPlayer = MusicPlayer<ArduinoToneNotePolicy<D4>>();
 void setup()
 {
+   Serial.begin(115200);
 	musicPlayer.play(tetrisSongB);
 }
 

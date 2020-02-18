@@ -135,7 +135,7 @@ template <typename PlayNotePolicy>
 class MusicPlayer : private PlayNotePolicy {
 private:
   const uint16_t *_melody;
-  uint16_t _wholenote;
+  uint32_t _wholenote;
   
   uint16_t _currentNoteIndex;
   uint16_t _note;
@@ -161,9 +161,15 @@ public:
     _playing = true;
     _nextNoteTime = 0;
     _note = NOTE_END;
-  
+
+    delay(1); // there's a crash on ESP8266 in one of the next lines if this delay is omitted
+    
     // the first value is the tempo
-    int tempo = pgm_read_word_near(_melody + _currentNoteIndex);
+    uint16_t tempo = (uint16_t)pgm_read_word_near(_melody + _currentNoteIndex);
+    if(tempo == 0) {
+      tempo = 180;
+    }
+
     _currentNoteIndex++;
     _wholenote = (60 * 1000 * 4) / tempo;
   }
@@ -209,7 +215,7 @@ public:
     if(_note != NOTE_REST) {
       // we only play the note for 90% of the duration, leaving 10% as a pause
       _notePlayed = true;
-    playNote(_note, pause ? noteDuration * 0.9 : noteDuration);
+      playNote(_note, pause ? noteDuration * 0.9 : noteDuration);
     }
   
     // move pointer to the next note
