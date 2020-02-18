@@ -94,7 +94,7 @@
 #define NOTE_CS8 4435
 #define NOTE_D8  4699
 #define NOTE_DS8 4978
-#define REST 0
+#define NOTE_REST 0
 
 /*
 timing bit pattern
@@ -131,27 +131,110 @@ P = no pause (between this and next note)
 
 #define NOTE_END 0xFFFF
 
-class MusicPlayer {
+template <typename PlayNotePolicy>
+class MusicPlayer : private PlayNotePolicy {
 private:
-  int _buzzerPin;
+  const uint16_t *_melody;
+  uint16_t _wholenote;
   
-  const int *_melody;
-  int _wholenote;
-  
-  int _currentNoteIndex;
-  int _note;
-  long _nextNoteTime;
+  uint16_t _currentNoteIndex;
+  uint16_t _note;
+  uint32_t _nextNoteTime;
   bool _playing;
   bool _notePlayed;
+  
+  using PlayNotePolicy::playNote;
 
 public:
-  MusicPlayer(int buzzerPin);
+  MusicPlayer() : _playing(false), _melody(NULL), _currentNoteIndex(0),
+                  _nextNoteTime(0), _notePlayed(false), _note(NOTE_END) {}
 
-  void play(const int *melody);
-  void tick();
-  bool isNotePlayed();
-  bool isPlaying();
-  int getLastNote();
+
+  void play(const uint16_t *melody) {
+    // ignore if something is playing
+    if(_playing) {
+      return;
+    }
+    
+    _melody = melody;
+    _currentNoteIndex = 0;
+    _playing = true;
+    _nextNoteTime = 0;
+    _note = NOTE_END;
+  
+    // the first value is the tempo
+    int tempo = pgm_read_word_near(_melody + _currentNoteIndex);
+    _currentNoteIndex++;
+    _wholenote = (60 * 1000 * 4) / tempo;
+  }
+
+  void tick() {
+    // if nothing is playing, skip
+    if(!_playing) {
+      return;
+    }
+  
+    // if it's not yet time to play the next note, skip
+    if(_nextNoteTime > millis()) {
+      _notePlayed = false;
+      return;
+    }
+  
+    // read the next note and duration
+    _note               = (uint16_t)pgm_read_word_near(_melody + _currentNoteIndex);
+    uint16_t noteLength = (uint16_t)pgm_read_word_near(_melody + _currentNoteIndex + 1);
+  
+    // if we reached the end of the song, stop playing and skip
+    if(_note == NOTE_END) {
+      _playing = false;
+      return;
+    }
+    
+    uint32_t noteDuration = 0;
+    uint16_t noteDividers = noteLength & 0xff;
+    bool pause = (noteLength & NOPAUSE) == 0;
+    
+    // calculates the duration of each note
+    for(uint8_t i = 0; i < 8; i++) {
+     if(noteDividers & 2 << i) {
+        noteDuration += _wholenote / (noteDividers & 2 << i);
+      }
+    }
+  
+    // calculate the time to start the next note
+    _nextNoteTime = millis() + noteDuration;
+    
+  
+    // don't play anything if it's a rest note
+    if(_note != NOTE_REST) {
+      // we only play the note for 90% of the duration, leaving 10% as a pause
+      _notePlayed = true;
+    playNote(_note, pause ? noteDuration * 0.9 : noteDuration);
+    }
+  
+    // move pointer to the next note
+    _currentNoteIndex += 2;
+  }
+  
+  bool isNotePlayed() {
+    return _notePlayed;
+  }
+  
+  bool isPlaying() {
+    return _playing;
+  }
+  
+  uint16_t getLastNote() {
+    return _note;
+  }
+};
+
+template <int pin>
+class ArduinoToneNotePolicy {
+protected:
+	void playNote(uint16_t note, uint32_t duration) {
+		tone(pin, note, duration);
+	}
 };
 
 #endif
